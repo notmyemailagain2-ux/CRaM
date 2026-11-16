@@ -1,0 +1,825 @@
+<!--
+  Copyright Mor3 Inc., 2026 All Rights Reserved.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>CRaM</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%234f46e5'/%3E%3Cpath d='M8 22l5-6 4 4 7-9' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+    <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+    <script src="config.js"></script>
+</head>
+<body>
+    <!-- Sign-in, two-factor, recovery and first-time setup screens -->
+    <div id="authScreen" class="auth-container" hidden>
+        <div class="auth-card">
+            <div class="auth-header">
+                <h1><i class="fas fa-chart-line" aria-hidden="true"></i> <span data-brand></span></h1>
+                <p class="auth-tagline">Computations, Resolutions, and Management</p>
+            </div>
+            <div class="auth-body">
+                <div class="form-error" id="authError" role="alert" hidden></div>
+                <div class="form-success" id="authSuccess" role="status" hidden></div>
+
+                <!-- Sign in -->
+                <form data-panel="login" novalidate>
+                    <h2 class="auth-title">Sign in</h2>
+                    <div class="form-group">
+                        <label class="form-label" for="loginEmail">Email</label>
+                        <input type="email" id="loginEmail" name="email" class="form-input" autocomplete="username" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="loginPassword">Password</label>
+                        <input type="password" id="loginPassword" name="password" class="form-input" autocomplete="current-password" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block">Sign in</button>
+                    <p class="auth-help"><a href="#" data-show-panel="forgot">Forgot your password?</a></p>
+                </form>
+
+                <!-- Two-factor code -->
+                <form data-panel="mfa" novalidate hidden>
+                    <h2 class="auth-title">Two-factor authentication</h2>
+                    <p class="auth-text">Enter the 6-digit code from your authenticator app. Lost your phone? Enter one of your recovery codes instead.</p>
+                    <div class="form-group">
+                        <label class="form-label" for="mfaCode">Authentication code</label>
+                        <input type="text" id="mfaCode" name="code" class="form-input code-input" inputmode="text" autocomplete="one-time-code" maxlength="11" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block">Verify</button>
+                    <p class="auth-help"><a href="#" data-show-panel="login">Back to sign in</a></p>
+                </form>
+
+                <!-- Two-factor enrollment -->
+                <form data-panel="enroll" novalidate hidden>
+                    <h2 class="auth-title">Set up two-factor authentication</h2>
+                    <p class="auth-text">Two-factor authentication is required. Install an authenticator app (Google Authenticator, Microsoft Authenticator, 1Password, Authy…), then scan this code.</p>
+                    <div class="qr-box"><img id="enrollQr" alt="Two-factor QR code" width="220" height="220"></div>
+                    <p class="auth-text small">Can't scan? Enter this key manually:<br><code id="enrollSecret" class="secret-key"></code></p>
+                    <div class="form-group">
+                        <label class="form-label" for="enrollCode">6-digit code from the app</label>
+                        <input type="text" id="enrollCode" name="code" class="form-input code-input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block">Turn on two-factor</button>
+                    <p class="auth-help"><a href="#" data-action="logout">Cancel and sign out</a></p>
+                </form>
+
+                <!-- Recovery codes -->
+                <div data-panel="codes" hidden>
+                    <h2 class="auth-title">Save your recovery codes</h2>
+                    <p class="auth-text">Each code works <strong>once</strong>. Use one if you lose your phone, or together with your authenticator code to reset a forgotten password. Store them somewhere safe, such as a password manager. They won't be shown again.</p>
+                    <ul class="recovery-codes" id="authCodes"></ul>
+                    <div class="code-actions">
+                        <button type="button" class="btn btn-secondary btn-sm" data-action="copy-codes" data-target="authCodes"><i class="fas fa-copy" aria-hidden="true"></i> Copy</button>
+                        <button type="button" class="btn btn-secondary btn-sm" data-action="download-codes" data-target="authCodes"><i class="fas fa-download" aria-hidden="true"></i> Download</button>
+                    </div>
+                    <label class="check-row"><input type="checkbox" id="codesSaved"> I have saved my recovery codes</label>
+                    <button type="button" class="btn btn-primary btn-block" id="codesContinue" disabled>Continue</button>
+                </div>
+
+                <!-- Forgot password -->
+                <form data-panel="forgot" novalidate hidden>
+                    <h2 class="auth-title">Reset your password</h2>
+                    <p class="auth-text">You'll need one of your recovery codes <strong>and</strong> a code from your authenticator app. If you don't have both, ask a CRaM administrator to reset your password.</p>
+                    <div class="form-group">
+                        <label class="form-label" for="fEmail">Email</label>
+                        <input type="email" id="fEmail" name="email" class="form-input" autocomplete="username" required>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" for="fRecovery">Recovery code</label>
+                            <input type="text" id="fRecovery" name="recovery_code" class="form-input code-input" placeholder="XXXXX-XXXXX" maxlength="11" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="fTotp">Authenticator code</label>
+                            <input type="text" id="fTotp" name="totp_code" class="form-input code-input" inputmode="numeric" maxlength="6" required>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="fNew">New password</label>
+                        <input type="password" id="fNew" name="new_password" class="form-input pw-check" autocomplete="new-password" required>
+                        <ul class="pw-rules"></ul>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="fConfirm">Confirm new password</label>
+                        <input type="password" id="fConfirm" name="confirm_password" class="form-input" autocomplete="new-password" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block">Reset password</button>
+                    <p class="auth-help"><a href="#" data-show-panel="login">Back to sign in</a></p>
+                </form>
+
+                <!-- First-time setup -->
+                <form data-panel="setup" novalidate hidden>
+                    <h2 class="auth-title">Welcome to CRaM</h2>
+                    <p class="auth-text">Create the first administrator account. The setup code is shown in the terminal where the server is running.</p>
+                    <div class="form-group">
+                        <label class="form-label" for="sCode">Setup code</label>
+                        <input type="text" id="sCode" name="setup_code" class="form-input code-input" autocomplete="off" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="sName">Your full name</label>
+                        <input type="text" id="sName" name="name" class="form-input" maxlength="100" autocomplete="name" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="sEmail">Your work email</label>
+                        <input type="email" id="sEmail" name="email" class="form-input" autocomplete="username" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="sPassword">Password</label>
+                        <input type="password" id="sPassword" name="password" class="form-input pw-check" autocomplete="new-password" required>
+                        <ul class="pw-rules"></ul>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="sConfirm">Confirm password</label>
+                        <input type="password" id="sConfirm" name="confirm_password" class="form-input" autocomplete="new-password" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block">Create administrator</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Application -->
+    <div id="appShell" hidden>
+        <header class="header">
+            <div class="container">
+                <nav class="nav" aria-label="Main">
+                    <a href="#dashboard" class="logo" data-page-link="dashboard">
+                        <i class="fas fa-chart-line" aria-hidden="true"></i> <span data-brand></span>
+                    </a>
+                    <ul class="nav-menu">
+                        <li><a href="#dashboard" class="nav-link active" data-page-link="dashboard">Dashboard</a></li>
+                        <li><a href="#customers" class="nav-link" data-page-link="customers">Customers</a></li>
+                        <li><a href="#leads" class="nav-link" data-page-link="leads">Leads</a></li>
+                        <li><a href="#deals" class="nav-link" data-page-link="deals">Deals</a></li>
+                        <li><a href="#activities" class="nav-link" data-page-link="activities">Activities</a></li>
+                        <li class="admin-only" hidden><a href="#team" class="nav-link" data-page-link="team">Team</a></li>
+                    </ul>
+                    <div class="nav-actions">
+                        <a href="landing.html" class="btn btn-secondary btn-icon" title="Team Portal" aria-label="Team Portal">
+                            <i class="fas fa-house" aria-hidden="true"></i>
+                        </a>
+                        <div class="user-menu">
+                            <span id="userName" class="user-name"></span>
+                            <button type="button" class="btn btn-secondary btn-icon" data-action="recovery-codes" title="Recovery codes" aria-label="Recovery codes">
+                                <i class="fas fa-shield-halved" aria-hidden="true"></i>
+                            </button>
+                            <button type="button" class="btn btn-secondary btn-icon" data-action="change-password" title="Change password" aria-label="Change password">
+                                <i class="fas fa-key" aria-hidden="true"></i>
+                            </button>
+                            <button type="button" class="btn btn-secondary btn-icon" data-action="logout" title="Sign out" aria-label="Sign out">
+                                <i class="fas fa-sign-out-alt" aria-hidden="true"></i>
+                            </button>
+                        </div>
+                    </div>
+                </nav>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <!-- Dashboard -->
+            <section id="dashboard" class="page active">
+                <div class="container">
+                    <h1 class="page-title">Dashboard</h1>
+
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-value" id="statCustomers">–</div>
+                            <div class="stat-label">Active Customers</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="statLeads">–</div>
+                            <div class="stat-label">Open Leads</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="statDeals">–</div>
+                            <div class="stat-label">Open Deals</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="statPipeline">–</div>
+                            <div class="stat-label">Pipeline Value</div>
+                        </div>
+                        <div class="stat-card stat-card-success">
+                            <div class="stat-value" id="statWon">–</div>
+                            <div class="stat-label">Closed Won</div>
+                        </div>
+                    </div>
+
+                    <div class="charts-grid">
+                        <div class="card">
+                            <div class="card-header"><h2 class="card-title">Deals by Stage</h2></div>
+                            <div class="card-body chart-box"><canvas id="dealsChart" aria-label="Deals by stage chart" role="img"></canvas></div>
+                        </div>
+                        <div class="card">
+                            <div class="card-header"><h2 class="card-title">Leads by Status</h2></div>
+                            <div class="card-body chart-box"><canvas id="leadsChart" aria-label="Leads by status chart" role="img"></canvas></div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h2 class="card-title">Recent Activities</h2>
+                            <a href="#activities" class="btn btn-secondary" data-page-link="activities">View All</a>
+                        </div>
+                        <div class="card-body">
+                            <div id="recentActivities"><p class="empty-state">Loading…</p></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Customers -->
+            <section id="customers" class="page">
+                <div class="container">
+                    <div class="page-header">
+                        <h1 class="page-title">Customers</h1>
+                        <div class="page-actions">
+                            <input type="search" id="customerSearch" placeholder="Search name, email, phone…" class="form-input" aria-label="Search customers">
+                            <select id="customerStatus" class="form-select" aria-label="Filter by status">
+                                <option value="">All statuses</option>
+                                <option value="active">Active</option>
+                                <option value="inactive">Inactive</option>
+                            </select>
+                            <select id="customerIndustry" class="form-select" aria-label="Filter by industry">
+                                <option value="">All industries</option>
+                            </select>
+                            <button type="button" class="btn btn-primary" data-action="new" data-type="customers">
+                                <i class="fas fa-plus" aria-hidden="true"></i> Add Customer
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="table-container">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Company</th>
+                                        <th>Industry</th>
+                                        <th>Email</th>
+                                        <th>Phone</th>
+                                        <th>Revenue</th>
+                                        <th>Status</th>
+                                        <th class="col-actions">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="customersTable">
+                                    <tr><td colspan="7" class="empty-state">Loading…</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Leads -->
+            <section id="leads" class="page">
+                <div class="container">
+                    <div class="page-header">
+                        <h1 class="page-title">Leads</h1>
+                        <div class="page-actions">
+                            <input type="search" id="leadSearch" placeholder="Search name, email, company…" class="form-input" aria-label="Search leads">
+                            <select id="leadStatus" class="form-select" aria-label="Filter by status">
+                                <option value="">All statuses</option>
+                            </select>
+                            <select id="leadPriority" class="form-select" aria-label="Filter by priority">
+                                <option value="">All priorities</option>
+                            </select>
+                            <button type="button" class="btn btn-primary" data-action="new" data-type="leads">
+                                <i class="fas fa-plus" aria-hidden="true"></i> Add Lead
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="table-container">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Contact</th>
+                                        <th>Company</th>
+                                        <th>Email</th>
+                                        <th>Position</th>
+                                        <th>Status</th>
+                                        <th>Priority</th>
+                                        <th class="col-actions">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="leadsTable">
+                                    <tr><td colspan="7" class="empty-state">Loading…</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Deals -->
+            <section id="deals" class="page">
+                <div class="container">
+                    <div class="page-header">
+                        <h1 class="page-title">Deals</h1>
+                        <div class="page-actions">
+                            <input type="search" id="dealSearch" placeholder="Search deal or company…" class="form-input" aria-label="Search deals">
+                            <select id="dealStage" class="form-select" aria-label="Filter by stage">
+                                <option value="">All stages</option>
+                            </select>
+                            <button type="button" class="btn btn-primary" data-action="new" data-type="deals">
+                                <i class="fas fa-plus" aria-hidden="true"></i> Add Deal
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="table-container">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Deal</th>
+                                        <th>Company</th>
+                                        <th>Value</th>
+                                        <th>Stage</th>
+                                        <th>Probability</th>
+                                        <th>Close Date</th>
+                                        <th class="col-actions">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="dealsTable">
+                                    <tr><td colspan="7" class="empty-state">Loading…</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Activities -->
+            <section id="activities" class="page">
+                <div class="container">
+                    <div class="page-header">
+                        <h1 class="page-title">Activities</h1>
+                        <div class="page-actions">
+                            <select id="activityTypeFilter" class="form-select" aria-label="Filter by type">
+                                <option value="">All types</option>
+                            </select>
+                            <button type="button" class="btn btn-primary" data-action="new" data-type="activities">
+                                <i class="fas fa-plus" aria-hidden="true"></i> Log Activity
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-body">
+                            <div id="activitiesList"><p class="empty-state">Loading…</p></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Team (admins only) -->
+            <section id="team" class="page">
+                <div class="container">
+                    <div class="page-header">
+                        <h1 class="page-title">Team Members</h1>
+                        <div class="page-actions">
+                            <button type="button" class="btn btn-primary" data-action="new" data-type="users">
+                                <i class="fas fa-user-plus" aria-hidden="true"></i> Add Team Member
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="table-container">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Email</th>
+                                        <th>Role</th>
+                                        <th>Two-Factor</th>
+                                        <th>Status</th>
+                                        <th class="col-actions">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="usersTable">
+                                    <tr><td colspan="6" class="empty-state">Loading…</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer class="app-footer">
+            <div class="container">Copyright Mor3 Inc., 2026 All Rights Reserved. · For internal use only</div>
+        </footer>
+    </div>
+
+    <!-- Customer modal -->
+    <div id="customersModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="customersModalTitle">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="customersModalTitle">Add Customer</h2>
+                <button type="button" class="modal-close" data-action="close-modal" aria-label="Close">&times;</button>
+            </div>
+            <form id="customersForm" novalidate>
+                <div class="modal-body">
+                    <div class="form-error" role="alert" hidden></div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" for="c_company_name">Company Name *</label>
+                            <input type="text" id="c_company_name" name="company_name" class="form-input" maxlength="200" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="c_industry">Industry</label>
+                            <input type="text" id="c_industry" name="industry" class="form-input" maxlength="100" list="industryList" placeholder="e.g. Technology">
+                            <datalist id="industryList"></datalist>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" for="c_email">Email</label>
+                            <input type="email" id="c_email" name="email" class="form-input" maxlength="254">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="c_phone">Phone</label>
+                            <input type="tel" id="c_phone" name="phone" class="form-input" maxlength="50">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" for="c_website">Website</label>
+                            <input type="text" id="c_website" name="website" class="form-input" maxlength="500" placeholder="example.com">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="c_status">Status</label>
+                            <select id="c_status" name="status" class="form-select">
+                                <option value="active">Active</option>
+                                <option value="inactive">Inactive</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="c_address">Street Address</label>
+                        <input type="text" id="c_address" name="address" class="form-input" maxlength="300">
+                    </div>
+                    <div class="form-row form-row-4">
+                        <div class="form-group">
+                            <label class="form-label" for="c_city">City</label>
+                            <input type="text" id="c_city" name="city" class="form-input" maxlength="100">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="c_state">State</label>
+                            <input type="text" id="c_state" name="state" class="form-input" maxlength="100">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="c_postal_code">Postal Code</label>
+                            <input type="text" id="c_postal_code" name="postal_code" class="form-input" maxlength="20">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="c_country">Country</label>
+                            <input type="text" id="c_country" name="country" class="form-input" maxlength="100">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" for="c_annual_revenue">Annual Revenue</label>
+                            <select id="c_annual_revenue" name="annual_revenue" class="form-select">
+                                <option value="">Select range</option>
+                                <option value="<1M">&lt; $1M</option>
+                                <option value="1M-10M">$1M – $10M</option>
+                                <option value="10M-50M">$10M – $50M</option>
+                                <option value="50M-100M">$50M – $100M</option>
+                                <option value=">100M">&gt; $100M</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="c_employee_count">Employees</label>
+                            <select id="c_employee_count" name="employee_count" class="form-select">
+                                <option value="">Select range</option>
+                                <option value="1-10">1 – 10</option>
+                                <option value="11-50">11 – 50</option>
+                                <option value="51-100">51 – 100</option>
+                                <option value="101-500">101 – 500</option>
+                                <option value="501-1000">501 – 1,000</option>
+                                <option value=">1000">&gt; 1,000</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="c_description">Notes</label>
+                        <textarea id="c_description" name="description" class="form-textarea" rows="3" maxlength="5000"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-danger btn-delete" data-action="delete-current" hidden>Delete</button>
+                    <span class="spacer"></span>
+                    <button type="button" class="btn btn-secondary" data-action="close-modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Customer</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Lead modal -->
+    <div id="leadsModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="leadsModalTitle">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="leadsModalTitle">Add Lead</h2>
+                <button type="button" class="modal-close" data-action="close-modal" aria-label="Close">&times;</button>
+            </div>
+            <form id="leadsForm" novalidate>
+                <div class="modal-body">
+                    <div class="form-error" role="alert" hidden></div>
+                    <div class="form-group">
+                        <label class="form-label" for="l_customer_id">Customer</label>
+                        <select id="l_customer_id" name="customer_id" class="form-select customer-select">
+                            <option value="">No customer</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" for="l_contact_name">Contact Name *</label>
+                            <input type="text" id="l_contact_name" name="contact_name" class="form-input" maxlength="200" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="l_position">Position</label>
+                            <input type="text" id="l_position" name="position" class="form-input" maxlength="100">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" for="l_email">Email</label>
+                            <input type="email" id="l_email" name="email" class="form-input" maxlength="254">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="l_phone">Phone</label>
+                            <input type="tel" id="l_phone" name="phone" class="form-input" maxlength="50">
+                        </div>
+                    </div>
+                    <div class="form-row form-row-3">
+                        <div class="form-group">
+                            <label class="form-label" for="l_source">Source</label>
+                            <select id="l_source" name="source" class="form-select">
+                                <option value="">Select source</option>
+                                <option value="Website">Website</option>
+                                <option value="Referral">Referral</option>
+                                <option value="Cold Call">Cold Call</option>
+                                <option value="Email">Email</option>
+                                <option value="Social Media">Social Media</option>
+                                <option value="Event">Event</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="l_status">Status</label>
+                            <select id="l_status" name="status" class="form-select" data-options="leadStatuses"></select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="l_priority">Priority</label>
+                            <select id="l_priority" name="priority" class="form-select" data-options="priorities"></select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="l_notes">Notes</label>
+                        <textarea id="l_notes" name="notes" class="form-textarea" rows="3" maxlength="5000"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-danger btn-delete" data-action="delete-current" hidden>Delete</button>
+                    <span class="spacer"></span>
+                    <button type="button" class="btn btn-secondary" data-action="close-modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Lead</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Deal modal -->
+    <div id="dealsModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="dealsModalTitle">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="dealsModalTitle">Add Deal</h2>
+                <button type="button" class="modal-close" data-action="close-modal" aria-label="Close">&times;</button>
+            </div>
+            <form id="dealsForm" novalidate>
+                <div class="modal-body">
+                    <div class="form-error" role="alert" hidden></div>
+                    <div class="form-group">
+                        <label class="form-label" for="d_deal_name">Deal Name *</label>
+                        <input type="text" id="d_deal_name" name="deal_name" class="form-input" maxlength="200" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="d_customer_id">Customer</label>
+                        <select id="d_customer_id" name="customer_id" class="form-select customer-select">
+                            <option value="">No customer</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" for="d_value">Value (USD)</label>
+                            <input type="text" id="d_value" name="value" class="form-input" inputmode="decimal" placeholder="50,000" maxlength="30">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="d_stage">Stage</label>
+                            <select id="d_stage" name="stage" class="form-select" data-options="dealStages"></select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" for="d_probability">Probability (%)</label>
+                            <input type="number" id="d_probability" name="probability" class="form-input" min="0" max="100" step="1" value="0">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="d_expected_close_date">Expected Close Date</label>
+                            <input type="date" id="d_expected_close_date" name="expected_close_date" class="form-input">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="d_description">Description</label>
+                        <textarea id="d_description" name="description" class="form-textarea" rows="3" maxlength="5000"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-danger btn-delete" data-action="delete-current" hidden>Delete</button>
+                    <span class="spacer"></span>
+                    <button type="button" class="btn btn-secondary" data-action="close-modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Deal</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Activity modal -->
+    <div id="activitiesModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="activitiesModalTitle">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="activitiesModalTitle">Log Activity</h2>
+                <button type="button" class="modal-close" data-action="close-modal" aria-label="Close">&times;</button>
+            </div>
+            <form id="activitiesForm" novalidate>
+                <div class="modal-body">
+                    <div class="form-error" role="alert" hidden></div>
+                    <div class="form-group">
+                        <label class="form-label" for="a_customer_id">Customer</label>
+                        <select id="a_customer_id" name="customer_id" class="form-select customer-select">
+                            <option value="">No customer</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" for="a_type">Activity Type *</label>
+                            <select id="a_type" name="type" class="form-select" data-options="activityTypes" data-placeholder="Select type" required></select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="a_date_time">Date &amp; Time</label>
+                            <input type="datetime-local" id="a_date_time" name="date_time" class="form-input">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="a_subject">Subject *</label>
+                        <input type="text" id="a_subject" name="subject" class="form-input" maxlength="200" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="a_description">Description</label>
+                        <textarea id="a_description" name="description" class="form-textarea" rows="4" maxlength="5000"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-danger btn-delete" data-action="delete-current" hidden>Delete</button>
+                    <span class="spacer"></span>
+                    <button type="button" class="btn btn-secondary" data-action="close-modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Activity</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Team member modal -->
+    <div id="usersModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="usersModalTitle">
+        <div class="modal-content modal-sm">
+            <div class="modal-header">
+                <h2 class="modal-title" id="usersModalTitle">Add Team Member</h2>
+                <button type="button" class="modal-close" data-action="close-modal" aria-label="Close">&times;</button>
+            </div>
+            <form id="usersForm" novalidate>
+                <div class="modal-body">
+                    <div class="form-error" role="alert" hidden></div>
+                    <div class="form-group">
+                        <label class="form-label" for="u_name">Full Name *</label>
+                        <input type="text" id="u_name" name="name" class="form-input" maxlength="100" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="u_email">Email *</label>
+                        <input type="email" id="u_email" name="email" class="form-input" maxlength="254" autocomplete="off" required>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" for="u_role">Role</label>
+                            <select id="u_role" name="role" class="form-select">
+                                <option value="user">User</option>
+                                <option value="admin">Admin</option>
+                            </select>
+                        </div>
+                        <div class="form-group edit-only">
+                            <label class="form-label" for="u_active">Status</label>
+                            <select id="u_active" name="active" class="form-select">
+                                <option value="1">Active</option>
+                                <option value="0">Deactivated</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="u_password"><span class="new-only">Password *</span><span class="edit-only">Reset Password</span></label>
+                        <input type="password" id="u_password" name="password" class="form-input pw-check" autocomplete="new-password">
+                        <small class="form-hint"><span class="new-only">Share it with them privately. They'll set up two-factor at first sign-in.</span><span class="edit-only">Leave blank to keep their current password.</span></small>
+                        <ul class="pw-rules"></ul>
+                    </div>
+                    <label class="check-row edit-only"><input type="checkbox" name="reset_2fa" value="1"> Reset two-factor authentication (lost phone). They'll set it up again at next sign-in.</label>
+                </div>
+                <div class="modal-footer">
+                    <span class="spacer"></span>
+                    <button type="button" class="btn btn-secondary" data-action="close-modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Change password modal -->
+    <div id="passwordModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="passwordModalTitle">
+        <div class="modal-content modal-sm">
+            <div class="modal-header">
+                <h2 class="modal-title" id="passwordModalTitle">Change Password</h2>
+                <button type="button" class="modal-close" data-action="close-modal" aria-label="Close">&times;</button>
+            </div>
+            <form id="passwordForm" novalidate>
+                <div class="modal-body">
+                    <div class="form-error" role="alert" hidden></div>
+                    <input type="text" name="username" id="p_username" autocomplete="username" hidden>
+                    <div class="form-group">
+                        <label class="form-label" for="p_current">Current Password</label>
+                        <input type="password" id="p_current" name="current_password" class="form-input" autocomplete="current-password" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="p_new">New Password</label>
+                        <input type="password" id="p_new" name="new_password" class="form-input pw-check" autocomplete="new-password" required>
+                        <ul class="pw-rules"></ul>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="p_confirm">Confirm New Password</label>
+                        <input type="password" id="p_confirm" name="confirm_password" class="form-input" autocomplete="new-password" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <span class="spacer"></span>
+                    <button type="button" class="btn btn-secondary" data-action="close-modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Change Password</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Recovery codes modal -->
+    <div id="recoveryModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="recoveryModalTitle">
+        <div class="modal-content modal-sm">
+            <div class="modal-header">
+                <h2 class="modal-title" id="recoveryModalTitle">Recovery Codes</h2>
+                <button type="button" class="modal-close" data-action="close-modal" aria-label="Close">&times;</button>
+            </div>
+            <form id="recoveryForm" novalidate>
+                <div class="modal-body">
+                    <div class="form-error" role="alert" hidden></div>
+                    <div class="recovery-step-1">
+                        <p class="auth-text">You have <strong id="codesLeft">0</strong> unused recovery codes. Generating new codes cancels all old ones.</p>
+                        <input type="text" name="username" id="r_username" autocomplete="username" hidden>
+                        <div class="form-group">
+                            <label class="form-label" for="r_password">Confirm your password</label>
+                            <input type="password" id="r_password" name="password" class="form-input" autocomplete="current-password" required>
+                        </div>
+                    </div>
+                    <div class="recovery-step-2" hidden>
+                        <p class="auth-text">Save these new codes somewhere safe. Each works once.</p>
+                        <ul class="recovery-codes" id="modalCodes"></ul>
+                        <div class="code-actions">
+                            <button type="button" class="btn btn-secondary btn-sm" data-action="copy-codes" data-target="modalCodes"><i class="fas fa-copy" aria-hidden="true"></i> Copy</button>
+                            <button type="button" class="btn btn-secondary btn-sm" data-action="download-codes" data-target="modalCodes"><i class="fas fa-download" aria-hidden="true"></i> Download</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <span class="spacer"></span>
+                    <button type="button" class="btn btn-secondary" data-action="close-modal">Close</button>
+                    <button type="submit" class="btn btn-primary recovery-step-1">Generate New Codes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="toastHost" class="toast-host" aria-live="polite"></div>
+
+    <script src="/vendor/chart.umd.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
+<!--
+  Copyright Mor3 Inc., 2026 All Rights Reserved.
+-->

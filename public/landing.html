@@ -1,0 +1,141 @@
+<!--
+  Copyright Mor3 Inc., 2026 All Rights Reserved.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>CRaM Team Portal</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%234f46e5'/%3E%3Cpath d='M8 22l5-6 4 4 7-9' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+    <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        html { scroll-behavior: smooth; }
+        section[id] { scroll-margin-top: 80px; }
+    </style>
+    <script src="config.js"></script>
+</head>
+<body data-portal>
+    <header class="header">
+        <div class="container">
+            <nav class="nav" aria-label="Main">
+                <a href="#top" class="logo">
+                    <i class="fas fa-chart-line" aria-hidden="true"></i> <span data-brand></span>
+                </a>
+                <ul class="nav-menu">
+                    <li><a href="#overview" class="nav-link">Overview</a></li>
+                    <li><a href="#resources" class="nav-link">Resources</a></li>
+                    <li><a href="#actions" class="nav-link">Quick Actions</a></li>
+                </ul>
+                <div class="nav-actions">
+                    <a href="index.html" class="btn btn-primary">
+                        <i class="fas fa-address-book" aria-hidden="true"></i> Open CRaM
+                    </a>
+                </div>
+            </nav>
+        </div>
+    </header>
+
+    <main id="top">
+        <section class="hero">
+            <div class="container">
+                <h1>CRaM</h1>
+                <p>Computations, Resolutions, and Management</p>
+                <div class="hero-buttons">
+                    <a href="index.html" class="btn btn-light">
+                        <i class="fas fa-address-book" aria-hidden="true"></i> <span>Open CRaM</span>
+                    </a>
+                    <a href="index.html#activities/new" class="btn btn-outline-light">
+                        <i class="fas fa-plus" aria-hidden="true"></i> Log Activity
+                    </a>
+                </div>
+            </div>
+        </section>
+
+        <!-- Live numbers from the CRM -->
+        <section id="overview" class="section-white section-compact">
+            <div class="container">
+                <div class="section-heading" style="margin-bottom: 2rem;">
+                    <h2>Performance Overview</h2>
+                </div>
+                <div class="stats-grid">
+                    <div class="stat-card border-success">
+                        <div class="stat-value text-success" id="portalCustomers">–</div>
+                        <div class="stat-label">Active Customers</div>
+                    </div>
+                    <div class="stat-card border-secondary">
+                        <div class="stat-value text-secondary" id="portalDeals">–</div>
+                        <div class="stat-label">Open Deals</div>
+                    </div>
+                    <div class="stat-card border-warning">
+                        <div class="stat-value text-warning" id="portalPipeline">–</div>
+                        <div class="stat-label">Pipeline Value</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="portalWon">–</div>
+                        <div class="stat-label">Closed Won</div>
+                    </div>
+                </div>
+                <p class="section-note" id="portalStatsNote">Loading live numbers…</p>
+            </div>
+        </section>
+
+        <section id="resources" class="section">
+            <div class="container">
+                <div class="section-heading">
+                    <h2>Resources</h2>
+                </div>
+                <div class="features-grid">
+                    <div class="feature">
+                        <div class="feature-icon"><i class="fas fa-address-book" aria-hidden="true"></i></div>
+                        <h3>Customers &amp; Leads</h3>
+                        <p>Track every company, contact, and lead your team works with.</p>
+                        <a href="index.html#customers" class="btn btn-primary">Open Customers</a>
+                    </div>
+                    <div class="feature">
+                        <div class="feature-icon"><i class="fas fa-handshake" aria-hidden="true"></i></div>
+                        <h3>Deal Pipeline</h3>
+                        <p>Follow each deal from first contact to closed.</p>
+                        <a href="index.html#deals" class="btn btn-secondary">Open Deals</a>
+                    </div>
+                    <div class="feature">
+                        <div class="feature-icon"><i class="fas fa-chart-bar" aria-hidden="true"></i></div>
+                        <h3>Dashboard</h3>
+                        <p>Live pipeline value, deals by stage, and lead status.</p>
+                        <a href="index.html#dashboard" class="btn btn-secondary">View Dashboard</a>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="actions" class="section-white section-compact">
+            <div class="container text-center">
+                <div class="section-heading" style="margin-bottom: 0;">
+                    <h2>Quick Actions</h2>
+                </div>
+                <div class="quick-actions">
+                    <a href="index.html#activities/new" class="btn btn-primary"><i class="fas fa-plus" aria-hidden="true"></i> Log Activity</a>
+                    <a href="index.html#customers/new" class="btn btn-secondary"><i class="fas fa-building" aria-hidden="true"></i> Add Customer</a>
+                    <a href="index.html#leads/new" class="btn btn-secondary"><i class="fas fa-user-plus" aria-hidden="true"></i> Add Lead</a>
+                    <a href="index.html#deals/new" class="btn btn-secondary"><i class="fas fa-handshake" aria-hidden="true"></i> Add Deal</a>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="site-footer">
+        <div class="container">
+            <div class="footer-bottom">
+                <p>Copyright Mor3 Inc., 2026 All Rights Reserved. · CRaM: Computations, Resolutions, and Management · For internal use only</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="landing.js"></script>
+</body>
+</html>
+<!--
+  Copyright Mor3 Inc., 2026 All Rights Reserved.
+-->
