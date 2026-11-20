@@ -7,6 +7,7 @@
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+const net = require('net');
 
 // Load settings from a local .env file if one exists (Node 20.12+ built-in).
 try {
@@ -575,6 +576,10 @@ const authLimiter = () => rateLimit({
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   message: { error: 'Too many failed attempts from this network. Please wait 15 minutes and try again.' },
+  handler: (req, res, next, options) => {
+    securityLog(req, 'rate limit reached: too many failed attempts from this IP', { path: req.path });
+    res.status(options.statusCode).json(options.message);
+  },
 });
 const loginLimiter = authLimiter();
 const mfaLimiter = authLimiter();
@@ -678,16 +683,47 @@ function revokeSessions(userId) {
 
 const getUser = (id) => db.prepare('SELECT * FROM users WHERE id = ?').get(id);
 
+// Security logging with the visitor's real IP address
+// Behind Cloudflare Tunnel every request reaches us from 127.0.0.1, so the visitor's
+// address comes from Cloudflare's CF-Connecting-IP header. That header is trusted only
+// when the connection itself came from this machine (cloudflared); otherwise req.ip is used.
+function clientIp(req) {
+  const peer = req.socket?.remoteAddress || '';
+  const fromLocal = peer === '127.0.0.1' || peer === '::1' || peer === '::ffff:127.0.0.1';
+  const cf = String(req.get('cf-connecting-ip') || '').trim();
+  if (fromLocal && net.isIP(cf)) return cf;
+  return req.ip || peer || 'unknown';
+}
+// Values typed by visitors are quoted and stripped of control characters so they
+// can't forge or break log lines.
+function logValue(value) {
+  return JSON.stringify(String(value ?? '').replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 120));
+}
+function securityLog(req, event, details = {}) {
+  const parts = [`ip=${clientIp(req)}`];
+  const country = String(req.get('cf-ipcountry') || '').replace(/[^A-Za-z]/g, '').slice(0, 2);
+  if (country) parts.push(`country=${country}`);
+  const accessEmail = req.get('cf-access-authenticated-user-email');
+  if (accessEmail) parts.push(`cloudflare_user=${logValue(accessEmail)}`);
+  for (const [key, value] of Object.entries(details)) parts.push(`${key}=${logValue(value)}`);
+  const ua = req.get('user-agent');
+  if (ua) parts.push(`agent=${logValue(ua)}`);
+  console.warn(`[security] ${event} ${parts.join(' ')}`);
+}
+
 // Lockout bookkeeping
 function isLocked(user) {
   return user.locked_until && user.locked_until > Date.now();
 }
-function recordFailure(user) {
+function recordFailure(user, req) {
   const fails = (user.failed_logins || 0) + 1;
   const lockedUntil = fails >= MAX_FAILED_LOGINS ? Date.now() + LOCKOUT_MINUTES * 60000 : 0;
   db.prepare('UPDATE users SET failed_logins = ?, locked_until = ? WHERE id = ?')
     .run(lockedUntil ? 0 : fails, lockedUntil, user.id);
-  if (lockedUntil) console.warn(`[security] ${user.email} locked for ${LOCKOUT_MINUTES} minutes after ${MAX_FAILED_LOGINS} failed attempts.`);
+  if (lockedUntil) {
+    if (req) securityLog(req, `account locked for ${LOCKOUT_MINUTES} minutes after ${MAX_FAILED_LOGINS} failed attempts`, { email: user.email });
+    else console.warn(`[security] ${user.email} locked for ${LOCKOUT_MINUTES} minutes after ${MAX_FAILED_LOGINS} failed attempts.`);
+  }
 }
 function recordSuccess(user) {
   db.prepare('UPDATE users SET failed_logins = 0, locked_until = 0, last_login_at = CURRENT_TIMESTAMP WHERE id = ?').run(user.id);
@@ -705,11 +741,15 @@ app.get('/api/setup/status', (req, res) => {
 });
 
 app.post('/api/setup', setupLimiter, route(async (req, res) => {
-  if (SETUP_CODE === null) return res.status(403).json({ error: 'Setup has already been completed.' });
+  if (SETUP_CODE === null) {
+    securityLog(req, 'setup attempted after setup was completed');
+    return res.status(403).json({ error: 'Setup has already been completed.' });
+  }
   const b = body(req);
   const code = String(b.setup_code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   const expected = SETUP_CODE.replace(/-/g, '');
   if (code.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(code), Buffer.from(expected))) {
+    securityLog(req, 'setup failed: wrong setup code', { email: b.email });
     throw new ValidationError('The setup code is incorrect. Check the server terminal.');
   }
   const name = cleanText(b.name, 'Name', { required: true, max: 100 });
@@ -718,6 +758,7 @@ app.post('/api/setup', setupLimiter, route(async (req, res) => {
   const id = insertRecord('users', { email, password: await bcrypt.hash(b.password, 12), name, role: 'admin' });
   SETUP_CODE = null;
   console.log(`[info] Administrator account created for ${email}.`);
+  securityLog(req, 'setup completed: administrator account created', { email });
   setSession(req, res, getUser(id), 'enroll');
   res.status(201).json({ stage: 'enroll' });
 }));
@@ -732,9 +773,14 @@ app.post('/api/auth/login', loginLimiter, route(async (req, res) => {
   }
   const user = db.prepare('SELECT * FROM users WHERE email = ? COLLATE NOCASE').get(email.trim());
   const valid = await bcrypt.compare(password, user ? user.password : DUMMY_HASH);
-  if (user && isLocked(user)) return res.status(429).json({ error: LOCKED_MSG });
+  if (user && isLocked(user)) {
+    securityLog(req, 'sign-in refused: account is locked', { email: user.email });
+    return res.status(429).json({ error: LOCKED_MSG });
+  }
   if (!user || !user.active || !valid) {
-    if (user && user.active) recordFailure(user);
+    const reason = !user ? 'unknown email' : !user.active ? 'account deactivated' : 'wrong password';
+    securityLog(req, `sign-in failed: ${reason}`, { email });
+    if (user && user.active) recordFailure(user, req);
     return res.status(401).json({ error: 'Incorrect email or password.' });
   }
 
@@ -747,7 +793,10 @@ app.post('/api/auth/login', loginLimiter, route(async (req, res) => {
 // Second step: authenticator code OR a one-time recovery code.
 app.post('/api/auth/mfa', mfaLimiter, requireSession('mfa'), route((req, res) => {
   const user = req.user;
-  if (isLocked(user)) return res.status(429).json({ error: LOCKED_MSG });
+  if (isLocked(user)) {
+    securityLog(req, 'two-factor refused: account is locked', { email: user.email });
+    return res.status(429).json({ error: LOCKED_MSG });
+  }
   const { code } = body(req);
   const step = user.totp_secret ? verifyTotp(decrypt(user.totp_secret), code, user.totp_last_step) : null;
   let usedRecovery = false;
@@ -756,10 +805,12 @@ app.post('/api/auth/mfa', mfaLimiter, requireSession('mfa'), route((req, res) =>
   } else if (useRecoveryCode(user, code)) {
     usedRecovery = true;
   } else {
-    recordFailure(user);
+    securityLog(req, 'two-factor failed: wrong code', { email: user.email });
+    recordFailure(user, req);
     return res.status(401).json({ error: 'That code is incorrect or has expired.' });
   }
   recordSuccess(user);
+  securityLog(req, usedRecovery ? 'signed in with a recovery code' : 'signed in', { email: user.email });
   setSession(req, res, getUser(user.id), 'full');
   const left = JSON.parse(getUser(user.id).recovery_codes || '[]').length;
   res.json({ stage: 'full', usedRecovery, recoveryCodesLeft: left });
@@ -835,20 +886,27 @@ app.post('/api/auth/recover', recoverLimiter, route(async (req, res) => {
   const generic = 'Those details could not be verified. Check them and try again, or ask an administrator to reset your password.';
   if (typeof email !== 'string' || !email.trim()) throw new ValidationError(generic);
   const user = db.prepare('SELECT * FROM users WHERE email = ? COLLATE NOCASE').get(email.trim());
-  if (!user || !user.active || !user.totp_enabled) throw new ValidationError(generic);
-  if (isLocked(user)) return res.status(429).json({ error: LOCKED_MSG });
+  if (!user || !user.active || !user.totp_enabled) {
+    securityLog(req, 'password recovery failed: unknown, deactivated or not enrolled account', { email });
+    throw new ValidationError(generic);
+  }
+  if (isLocked(user)) {
+    securityLog(req, 'password recovery refused: account is locked', { email: user.email });
+    return res.status(429).json({ error: LOCKED_MSG });
+  }
 
   const step = verifyTotp(decrypt(user.totp_secret), totp_code, user.totp_last_step);
   const hashes = JSON.parse(user.recovery_codes || '[]');
   if (!step || !hashes.includes(hashCode(recovery_code || ''))) {
-    recordFailure(user);
+    securityLog(req, 'password recovery failed: wrong recovery or authenticator code', { email: user.email });
+    recordFailure(user, req);
     throw new ValidationError(generic);
   }
   assertStrongPassword(new_password, user); // checked before consuming the code
   useRecoveryCode(user, recovery_code);
   db.prepare(`UPDATE users SET password = ?, totp_last_step = ?, token_version = token_version + 1,
               failed_logins = 0, locked_until = 0 WHERE id = ?`).run(await bcrypt.hash(new_password, 12), step, user.id);
-  console.log(`[security] ${user.email} reset their password with a recovery code.`);
+  securityLog(req, 'password reset with a recovery code', { email: user.email });
   res.json({ message: 'Password reset. You can now sign in with your new password.' });
 }));
 
